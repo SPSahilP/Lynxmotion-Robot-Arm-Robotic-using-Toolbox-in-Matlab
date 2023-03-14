@@ -1,0 +1,107 @@
+%% This code trains the robot arm with Forward Kinematics
+% Joint angle displacement of each trained points will be recorded and code in Arduino
+%% Create port and add terminator (\r)
+s = serial('COM10','Baudrate', 9600,'Terminator','CR');
+fopen(s);
+
+%% Figuring out the angle from 0 - 180 
+% From the datasheet, it says 500-2500 is the pulse for 0 - 180 degerees
+% 2000/180 range = 100/9
+% Degrees = (Pulse - 500) * 9/100 
+% Pulse = (Degrees * 100/9) + 500
+
+fprintf(s,'#0 P 1500 S300 #1 P 1500 S300 #2 P 1200 S300 #3 P 829 S300 #4 P 1500 S300 #5 P1500 S300') ; %home position 
+
+%% Links dimension in Inches 
+d1= 1; % Link from Base to Shoulder
+d2= 6; % Link from Shoulder to Elbow
+d3= 9.7; % Link from Elbow to Wrist
+d4= 10; % Link from Wrist to End Effector
+            
+% Create Links based on DH table
+L(1) = Link([0 d1 0 pi/2]);
+L(2) = Link([0 0 d2 0]);
+L(3) = Link([0 0 d3 0]);
+L(4) = Link([0 0 d4 0]);
+L(5) = Revolute('a',0,'alpha',0); % L(5) and L(6) are both Revolute Joints
+L(6) = Revolute('a',0,'alpha',0); 
+
+% Joint limit angles from 0 degrees to 180 (Wrist Joint 0 to 90)
+L(1).qlim = [0 pi];
+L(2).qlim = [0 pi];
+L(3).qlim = [0 pi];
+L(4).qlim = [0 pi/2];
+L(5).qlim = [0 pi];
+L(6).qlim = [0 pi];
+            
+% Create Links & Plot robot
+GDIPBot = SerialLink(L);
+GDIPBot.plotopt = {'workspace', [-30,30,-30,30,0,30], 'tile1color', [232 232 232], 'jointcolor', 'c','noarrow', 'nowrist'};
+            
+% Display Robot in teach mode q5= rotation of wrist and q6= Gripper 
+q = [pi/2 pi/2 pi/2 0 pi/2 0];
+GDIPBot.teach(q);
+%% Initialise x,y,z position
+% Variable x,y,z cannot be an empty variable 
+x= 1;
+y= 1;
+z =1;
+
+%% Teaching Process with forward kinematics 
+
+q = GDIPBot.getpos();
+T = GDIPBot.fkine(q);
+[x,y,z] = transl(T);
+
+
+% Convert q values from Radians to Degrees
+base = round(q(1)*180/pi);
+shoulder = round(q(2)*180/pi);
+elbow = round(q(3)*180/pi);
+wrist = round(q(4)*180/pi);
+RevoluteWrist = round(q(5)*180/pi);
+Gripper = round(q(6)*180/pi);
+
+% Inverts the degrees for shoulder and wrist (Inverted DH model)
+if (shoulder > 90)
+    shoulder= 90 - (shoulder - 90);
+    disp('Shoulder is inverted')
+elseif (shoulder == 90)
+        disp("");
+else
+    shoulder = 90 + (90 - shoulder);
+end
+
+if (wrist == 0)
+    wrist = 90;
+elseif (wrist > 0)
+   wrist = 90 - wrist; 
+end
+
+% Send Serial Command 
+fprintf(s, sprintf('#%d %s %d %s%d', 0, 'P', round((base * 100/9) + 500),'S', 300));
+fprintf(s, sprintf('#%d %s %d %s%d', 1, 'P', round((shoulder * 100/9) + 500), 'S', 300));
+fprintf(s, sprintf('#%d %s %d %s%d', 2, 'P', round((elbow * 100/9) + 500), 'S', 300));
+fprintf(s, sprintf('#%d %s %d %s%d', 3, 'P', round((wrist * 100/9) + 500), 'S', 300));
+fprintf(s, sprintf('#%d %s %d %s%d', 4, 'P', round((RevoluteWrist * 100/9) + 500), 'S', 300));
+fprintf(s, sprintf('#%d %s %d %s%d', 5, 'P', round((Gripper * 100/9) + 500), 'S', 300));
+
+%% Once position is satisfied, save base, shoulder and elbow angle on excel sheet 
+
+disp(['Base angle is:  ' num2str(base) ' Degrees']);
+disp(['Shoulder angle is:  ' num2str(shoulder) ' Degrees']);
+disp(['Elbow angle is:  ' num2str(elbow) ' Degrees']);
+disp(['Wrist angle is:  ' num2str(wrist) ' Degrees']);
+disp(['RotationWrist angle is:  ' num2str(RevoluteWrist) ' Degrees']);
+disp(['Gripper angle is:  ' num2str(Gripper) ' Degrees']);
+
+
+%%
+
+fprintf(s,'#0 P 1500 S600 #1 P 1400 S600 #2 P 1269 S600 #3 P 829 S600 #4 P 1300 S600') ; %home position 
+%%
+fprintf(s,'#5 P 1500 S300') ; %home position 
+
+
+
+
